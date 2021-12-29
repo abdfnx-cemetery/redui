@@ -3,6 +3,7 @@ package redis
 import (
 	"fmt"
 	"time"
+	"strings"
 
 	"github.com/abdfnx/redui/core"
 	"github.com/abdfnx/redui/config"
@@ -60,4 +61,15 @@ func NewRedisClient(conf config.Config, outputChan chan core.OutputMessage) Redi
 	}
 
 	return client
+}
+
+func RedisExecute(client RedisClient, command string) (interface{}, error) {
+	stringArgs := strings.Split(command, " ")
+	var args = make([]interface{}, len(stringArgs))
+
+	for i, s := range stringArgs {
+		args[i] = s
+	}
+
+	return client.Do(args...).Result()
 }
