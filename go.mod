@@ -1,4 +1,4 @@
-module github.com/abdfnx/reds
+module github.com/abdfnx/redui
 
 go 1.17
 
