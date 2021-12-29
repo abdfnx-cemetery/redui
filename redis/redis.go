@@ -76,6 +76,8 @@ func RedisExecute(client RedisClient, command string) (interface{}, error) {
 }
 
 var redisKeys = make([]string, 0)
+var redisKeysLastUpdate time.Time
+var redisLock sync.RWMutex
 
 func KeysWithLimit(client RedisClient, key string, maxScanCount int) (redisKeys []string, err error) {
 	var cursor uint64 = 0
@@ -99,4 +101,71 @@ func KeysWithLimit(client RedisClient, key string, maxScanCount int) (redisKeys 
 	}
 
 	return
+}
+
+func RedisKeys(client RedisClient, pattern string) ([]string, error) {
+	keys, err := KeysWithLimit(client, pattern, -1)
+
+	if err != nil {
+		return nil, nil
+	}
+
+	return keys, nil
+}
+
+func RedisAllKeys(client RedisClient, cache bool) ([]string, error) {
+	redisLock.RLock()
+
+	if cache && redisKeysLastUpdate.After(time.Now().Add(60*time.Second)) {
+		redisLock.RUnlock()
+		return redisKeys, nil
+	}
+
+	redisLock.RUnlock()
+
+	redisLock.Lock()
+	defer redisLock.Unlock()
+
+	keys, err := KeysWithLimit(client, "*", 10)
+
+	if err != nil {
+		return nil, err
+	}
+
+	redisKeys = keys
+	redisKeysLastUpdate = time.Now()
+
+	return keys, nil
+}
+
+func RedisServerInfo(conf config.Config, client RedisClient) (string, error) {
+	res, err := client.Info().Result()
+
+	if err != nil {
+		return "", err
+	}
+
+	var kvpairs = make(map[string]string)
+
+	for _, kv := range strings.Split(res, "\n") {
+		if strings.HasPrefix(kv, "#") || kv == "" {
+			continue
+		}
+
+		pair := strings.SplitN(kv, ":", 2)
+
+		if len(pair) != 2 {
+			continue
+		}
+
+		kvpairs[pair[0]] = pair[1]
+	}
+
+	keySpace := "-"
+
+	if ks, ok := kvpairs[fmt.Sprintf("db%d", conf.DB)]; ok {
+		keySpace = ks
+	}
+
+	return fmt.Sprintf(" Redis Version: %s    Redis Server: %s:%d/%d\n KeySpace: %s", kvpairs["redis_version"], conf.Host, conf.Port, conf.DB, keySpace), nil
 }
