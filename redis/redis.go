@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 	"strings"
+	"sync"
 
 	"github.com/abdfnx/redui/core"
 	"github.com/abdfnx/redui/config"
@@ -72,4 +73,30 @@ func RedisExecute(client RedisClient, command string) (interface{}, error) {
 	}
 
 	return client.Do(args...).Result()
+}
+
+var redisKeys = make([]string, 0)
+
+func KeysWithLimit(client RedisClient, key string, maxScanCount int) (redisKeys []string, err error) {
+	var cursor uint64 = 0
+	var keys []string
+	var scanCount = 0
+
+	for scanCount < maxScanCount || maxScanCount == -1{
+		scanCount++
+
+		keys, cursor, err = client.Scan(cursor, key, 100).Result()
+
+		if err != nil {
+			return
+		}
+
+		redisKeys = append(redisKeys, keys...)
+
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return
 }
